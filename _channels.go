@@ -19,7 +19,7 @@ func main() {
 	c := make(chan int32)
 	go getRandomNumber(c)
 
-	output := <-c
-	fmt.Println(output)
+	//output := <-c
+	fmt.Printf("%d", <-c)
 
 }
