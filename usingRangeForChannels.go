@@ -8,24 +8,23 @@ import (
 func main() {
 
 	channel := make(chan int)
-
 	go getNumbers(channel)
-
 	for {
-		message, ok := <-channel
-		if !ok {
-			break
+		if message, ok := <-channel; ok {
+			fmt.Println(message)
 		}
-		fmt.Println(message)
+		break
 	}
 
 }
 
 func getNumbers(channel chan int) {
 
-	for i := 0; i < 3; i++ {
+	numberOfRound := rand.Intn(5) + 1
+	fmt.Println(numberOfRound)
+
+	for range numberOfRound {
 		channel <- rand.Intn(10)
 	}
 	close(channel)
-
 }
