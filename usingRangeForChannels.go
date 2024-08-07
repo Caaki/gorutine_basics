@@ -25,11 +25,6 @@ func main() {
 		default:
 
 		}
-		//	if message, ok := <-channel; ok {
-		//		fmt.Println(message)
-		//	}
-		//	break
-		//}
 	}
 }
 
