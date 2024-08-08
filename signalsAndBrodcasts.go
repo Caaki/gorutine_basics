@@ -58,15 +58,12 @@ func addMessageForRecipiants(message string, recipients []string, cond *sync.Con
 }
 
 func sendMessageToRecipiants(cond *sync.Cond) {
-	cond.L.Lock()
 	fmt.Println(len(notReadMessages))
 	for recipient, messages := range notReadMessages {
 		for _, message := range messages {
 			fmt.Println("Message for: %s [%s]", recipient, message)
 		}
 	}
-	cond.Wait()
-	cond.L.Unlock()
 
 	notReadMessages = make(map[string][]string)
 }
