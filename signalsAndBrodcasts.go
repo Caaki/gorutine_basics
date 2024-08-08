@@ -6,64 +6,86 @@ import (
 	"time"
 )
 
-type ConditionWithCond struct {
-	cond   bool
-	signal *sync.Cond
-}
-
-var beacon = ConditionWithCond{cond: false, signal: sync.NewCond(&sync.Mutex{})}
+var beacon = sync.NewCond(&sync.Mutex{})
 var notReadMessages = make(map[string][]string)
-var channel = make(chan bool)
+var addingMessageBeacpm = sync.NewCond(&sync.Mutex{})
 
 func main() {
 	wg := sync.WaitGroup{}
 
-	wg.Add(1)
-	go processMessages(&wg)
-
-	wg.Add(1)
-	go addMessageForRecipiants("Ovo je proba", []string{"Pera", "Mika"}, beacon.signal, 1, &wg)
-	wg.Add(1)
-	go addMessageForRecipiants("Ovo je proba2", []string{"Pera", "Mika"}, beacon.signal, 7, &wg)
-
-	wg.Wait()
+	go addMessageForRecipientsLoop(&wg)
+	processMessages(&wg)
 
 }
 
 func processMessages(wg *sync.WaitGroup) {
-	defer wg.Done()
+	wg.Add(1)
 	for {
-		beacon.signal.L.Lock()
+		beacon.L.Lock()
 		for len(notReadMessages) == 0 {
-			beacon.signal.Wait()
+			beacon.Wait()
 		}
 
-		sendMessageToRecipiants(beacon.signal)
-		beacon.signal.L.Unlock()
+		beacon.L.Unlock()
+		sendMessageToRecipiants(beacon)
+	}
+	wg.Done()
+}
+
+func addMessageForRecipientsLoop(wg *sync.WaitGroup) {
+
+	for {
+		fmt.Print("Unesite broj primaoca: ")
+		countOfRecipients := 0
+		fmt.Scan(&countOfRecipients)
+
+		recipients := make([]string, 0)
+
+		fmt.Print("Unesite poruku : ")
+		messageForUsers := ""
+		fmt.Scanln(&messageForUsers)
+
+		for range countOfRecipients {
+			name := ""
+			fmt.Print("Unesite ime primaoca: ")
+			fmt.Scanln(&name)
+			recipients = append(recipients, name)
+		}
+
+		addingMessageBeacpm.L.Lock()
+		for _, name := range recipients {
+			if len(notReadMessages[name]) == 0 {
+				notReadMessages[name] = make([]string, 0)
+			}
+			notReadMessages[name] = append(notReadMessages[name], messageForUsers)
+		}
+		beacon.Signal()
+		addingMessageBeacpm.L.Unlock()
 	}
 }
 
-func addMessageForRecipiants(message string, recipients []string, cond *sync.Cond, sec int, wg *sync.WaitGroup) {
+func addMessageForRecipiants(message string, recipients []string, sec int, wg *sync.WaitGroup) {
 	defer wg.Done()
 	time.Sleep(time.Duration(sec) * time.Second)
-	cond.L.Lock()
+	addingMessageBeacpm.L.Lock()
 	for _, value := range recipients {
 		if len(notReadMessages[value]) == 0 {
 			notReadMessages[value] = make([]string, 0)
 		}
 		notReadMessages[value] = append(notReadMessages[value], message)
 	}
-	cond.Signal()
-	cond.L.Unlock()
+	beacon.Signal()
+	addingMessageBeacpm.L.Unlock()
 }
 
-func sendMessageToRecipiants(cond *sync.Cond) {
+func sendMessageToRecipiants(beacon *sync.Cond) {
+	beacon.L.Lock()
 	fmt.Println(len(notReadMessages))
 	for recipient, messages := range notReadMessages {
 		for _, message := range messages {
-			fmt.Println("Message for: %s [%s]", recipient, message)
+			fmt.Printf("Message for: %s [%s]\n", recipient, message)
 		}
 	}
-
+	beacon.L.Unlock()
 	notReadMessages = make(map[string][]string)
 }
