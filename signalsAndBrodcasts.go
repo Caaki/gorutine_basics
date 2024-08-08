@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"math/rand"
 	"sync"
 	"time"
 )
@@ -12,30 +11,34 @@ type ConditionWithCond struct {
 	signal *sync.Cond
 }
 
-var ready bool
 var beacon = ConditionWithCond{cond: false, signal: sync.NewCond(&sync.Mutex{})}
 var notReadMessages = make(map[string][]string)
+var channel = make(chan bool)
 
 func main() {
+	defer close(channel)
+	//wg := sync.WaitGroup{}
 
-	go func(con ConditionWithCond) {
-		for {
-			if ready {
+	go addMessageForRecipiants("Ovo je proba", []string{"Pera", "Mika"}, beacon.signal, 7)
+	go addMessageForRecipiants("Ovo je proba2", []string{"Pera", "Mika"}, beacon.signal, 1)
 
-				beacon.signal.Wait()
+	for {
+		select {
+		case message, ok := <-channel:
+			if ok && message == true {
 				sendMessageToRecipiants(beacon.signal)
 			}
+			if !ok {
+				close(channel)
+				break
+			}
 		}
-	}(beacon)
-
-	go addMessageForRecipiants("Ovo je proba", []string{"Pera", "Mika"}, beacon.signal)
-	go addMessageForRecipiants("Ovo je proba2", []string{"Pera", "Mika"}, beacon.signal)
-
-	time.Sleep(10 * time.Second)
+	}
 
 }
 
-func addMessageForRecipiants(message string, recipients []string, cond *sync.Cond) {
+func addMessageForRecipiants(message string, recipients []string, cond *sync.Cond, sec int) {
+	time.Sleep(time.Duration(sec) * time.Second)
 	cond.L.Lock()
 	for _, value := range recipients {
 		if len(notReadMessages[value]) == 0 {
@@ -43,11 +46,9 @@ func addMessageForRecipiants(message string, recipients []string, cond *sync.Con
 		}
 		notReadMessages[value] = append(notReadMessages[value], message)
 	}
-	cond.Wait()
 	cond.L.Unlock()
-	time.Sleep(time.Duration(rand.Intn(5)) * time.Second)
+	channel <- true
 	cond.Signal()
-	ready = true
 }
 
 func sendMessageToRecipiants(cond *sync.Cond) {
@@ -61,5 +62,5 @@ func sendMessageToRecipiants(cond *sync.Cond) {
 
 	cond.Wait()
 	cond.L.Unlock()
-
+	channel <- false
 }
