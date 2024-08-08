@@ -16,28 +16,35 @@ var notReadMessages = make(map[string][]string)
 var channel = make(chan bool)
 
 func main() {
-	defer close(channel)
-	//wg := sync.WaitGroup{}
+	wg := sync.WaitGroup{}
 
-	go addMessageForRecipiants("Ovo je proba", []string{"Pera", "Mika"}, beacon.signal, 7)
-	go addMessageForRecipiants("Ovo je proba2", []string{"Pera", "Mika"}, beacon.signal, 1)
+	wg.Add(1)
+	go processMessages(&wg)
 
-	for {
-		select {
-		case message, ok := <-channel:
-			if ok && message == true {
-				sendMessageToRecipiants(beacon.signal)
-			}
-			if !ok {
-				close(channel)
-				break
-			}
-		}
-	}
+	wg.Add(1)
+	go addMessageForRecipiants("Ovo je proba", []string{"Pera", "Mika"}, beacon.signal, 1, &wg)
+	wg.Add(1)
+	go addMessageForRecipiants("Ovo je proba2", []string{"Pera", "Mika"}, beacon.signal, 7, &wg)
+
+	wg.Wait()
 
 }
 
-func addMessageForRecipiants(message string, recipients []string, cond *sync.Cond, sec int) {
+func processMessages(wg *sync.WaitGroup) {
+	defer wg.Done()
+	for {
+		beacon.signal.L.Lock()
+		for len(notReadMessages) == 0 {
+			beacon.signal.Wait()
+		}
+
+		sendMessageToRecipiants(beacon.signal)
+		beacon.signal.L.Unlock()
+	}
+}
+
+func addMessageForRecipiants(message string, recipients []string, cond *sync.Cond, sec int, wg *sync.WaitGroup) {
+	defer wg.Done()
 	time.Sleep(time.Duration(sec) * time.Second)
 	cond.L.Lock()
 	for _, value := range recipients {
@@ -46,21 +53,20 @@ func addMessageForRecipiants(message string, recipients []string, cond *sync.Con
 		}
 		notReadMessages[value] = append(notReadMessages[value], message)
 	}
-	cond.L.Unlock()
-	channel <- true
 	cond.Signal()
+	cond.L.Unlock()
 }
 
 func sendMessageToRecipiants(cond *sync.Cond) {
-
 	cond.L.Lock()
+	fmt.Println(len(notReadMessages))
 	for recipient, messages := range notReadMessages {
 		for _, message := range messages {
 			fmt.Println("Message for: %s [%s]", recipient, message)
 		}
 	}
-
 	cond.Wait()
 	cond.L.Unlock()
-	channel <- false
+
+	notReadMessages = make(map[string][]string)
 }
